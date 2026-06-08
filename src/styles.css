@@ -8,6 +8,12 @@
 @import '@spartan-ng/brain/hlm-tailwind-preset.css';
 
 :root {
+  /* VALORANT colors */
+  --valorant-bg: #0d0d0f;
+  --valorant-red: #ff4655;
+  --valorant-red-mid: #bd3944;
+  --valorant-red-dark: #6a0f1a;
+
   color-scheme: light;
 
   --font-sans:
@@ -85,6 +91,9 @@
   }
 
   body {
-    @apply bg-background text-foreground;
+    @apply text-white;
+
+    background-color: var(--valorant-bg);
+    min-height: 100dvh;
   }
 }

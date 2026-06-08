@@ -10,8 +10,11 @@ import { HlmButtonImports } from '../libs/ui/button/src';
       font-family: 'Space Mono', monospace;
       font-weight: 400;
       font-style: normal;
-      color: lightgrey;
+      color: lightgray;
     }
   `,
 })
-export class NavButtonGroup { }
+export class NavButtonGroup {
+  protected variant = 'ghost' as const;
+  protected labels = ['Form', 'Aim', 'Entry', 'Queue x Time'];
+}

@@ -11,7 +11,7 @@ import { NavButtonGroup } from '../nav-button-group/nav-button-group';
       font-weight: 600;
       font-style: normal;
 
-      background: rgba(0, 0, 0, 0.9);
+      background: rgba(0, 0, 0, 0.4);
       box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
       backdrop-filter: blur(6.9px);
       -webkit-backdrop-filter: blur(6.9px);
