@@ -1,4 +1,4 @@
-import { Component } from '@angular/core';
+import { Component, input, computed } from '@angular/core';
 import { AgentImage } from '../agent-image/agent-image';
 
 @Component({
@@ -7,4 +7,6 @@ import { AgentImage } from '../agent-image/agent-image';
   templateUrl: './hero.html',
   styles: ``,
 })
-export class Hero { }
+export class Hero {
+
+}
