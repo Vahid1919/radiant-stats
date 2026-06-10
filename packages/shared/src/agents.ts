@@ -1,0 +1,25 @@
+export const AGENTS = [
+  'Astra',
+  'Breach',
+  'Brimstone',
+  'Chamber',
+  'Clove',
+  'Cypher',
+  'Deadlock',
+  'Fade',
+  'Gekko',
+  'Harbor',
+  'Iso',
+  'Jett',
+  'KAYO',
+  'Killjoy',
+  'Miks',
+  'Neon',
+  'Omen',
+  'Phoenix',
+  'Raze',
+  'Reyna',
+  'Sage',
+] as const;
+
+export type AgentName = (typeof AGENTS)[number];
