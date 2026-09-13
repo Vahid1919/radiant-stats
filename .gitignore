@@ -1,10 +1,8 @@
 # See https://docs.github.com/get-started/getting-started-with-git/ignoring-files for more about ignoring files.
 
-# Compiled output
-dist/
-tmp/
-out-tsc/
-bazel-out/
+# SvelteKit
+.svelte-kit/
+build/
 
 # Node
 node_modules/
@@ -30,17 +28,15 @@ pnpm-debug.log
 !.vscode/mcp.json
 .history/*
 
-# Angular
-.angular/
-
-# Miscellaneous
-.sass-cache/
-connect.lock
+# Test output
+playwright-report/
+test-results/
 coverage/
-libpeerconnection.log
-testem.log
-typings/
-__screenshots__/
+
+# Local environment
+.env
+.env.*
+!.env.example
 
 # System files
 .DS_Store

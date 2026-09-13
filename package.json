@@ -1,16 +1,37 @@
 {
   "name": "radiant-stats",
   "private": true,
+  "type": "module",
   "scripts": {
-    "dev:web": "pnpm --filter @radiant-stats/web run start",
-    "dev:api": "pnpm --filter @radiant-stats/api run start:dev",
-    "dev": "pnpm run dev:web & pnpm run dev:api",
-    "test": "pnpm -r run test",
-    "build": "pnpm -r run build"
+    "dev": "vite dev",
+    "build": "vite build",
+    "preview": "vite preview",
+    "start": "node build",
+    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+    "lint": "eslint src tests vite.config.ts svelte.config.js eslint.config.js",
+    "format:check": "prettier --check .",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "devDependencies": {
+    "@eslint/js": "latest",
+    "@sveltejs/adapter-node": "latest",
+    "@sveltejs/kit": "latest",
+    "@sveltejs/vite-plugin-svelte": "latest",
+    "@tailwindcss/vite": "^4.3.0",
+    "eslint": "latest",
+    "eslint-config-prettier": "latest",
+    "eslint-plugin-svelte": "latest",
+    "globals": "latest",
     "prettier": "^3.8.3",
+    "prettier-plugin-svelte": "latest",
     "prettier-plugin-tailwindcss": "^0.8.0",
-    "typescript": "~5.9.2"
+    "svelte": "latest",
+    "svelte-check": "latest",
+    "tailwindcss": "^4.3.0",
+    "typescript": "~5.9.2",
+    "typescript-eslint": "latest",
+    "vite": "latest",
+    "vitest": "latest"
   }
 }
