@@ -20,10 +20,37 @@ export const AGENTS = [
   'Raze',
   'Reyna',
   'Sage',
+  'Skye',
+  'Sova',
+  'Tejo',
+  'Veto',
+  'Viper',
+  'Vyse',
+  'Waylay',
+  'Yoru',
 ] as const;
 
 export type AgentName = (typeof AGENTS)[number];
 
+const PNG_ARTWORK_AGENTS = new Set<AgentName>([
+  'Skye',
+  'Sova',
+  'Tejo',
+  'Veto',
+  'Viper',
+  'Vyse',
+  'Waylay',
+  'Yoru',
+]);
+
+export function getAgentArtworkName(agentName: string): AgentName | null {
+  const artworkName = agentName === 'KAY/O' ? 'KAYO' : agentName;
+  return AGENTS.includes(artworkName as AgentName)
+    ? (artworkName as AgentName)
+    : null;
+}
+
 export function agentImageUrl(name: AgentName): string {
-  return `/images/agents/${name}_Artwork_Full.webp`;
+  const extension = PNG_ARTWORK_AGENTS.has(name) ? 'png' : 'webp';
+  return `/images/agents/${name}_Artwork_Full.${extension}`;
 }
