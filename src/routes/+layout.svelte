@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { navigating } from '$app/state';
+  import LoadingOverlay from '$lib/components/LoadingOverlay.svelte';
   import '../app.css';
 
   let { children } = $props();
@@ -16,5 +18,9 @@
     rel="stylesheet"
   />
 </svelte:head>
+
+{#if navigating.to}
+  <LoadingOverlay label="Loading player dashboard..." />
+{/if}
 
 {@render children()}

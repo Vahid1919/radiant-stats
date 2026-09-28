@@ -1,10 +1,13 @@
 <script lang="ts">
+  import { resolve } from '$app/paths';
   import NavButtonGroup from './NavButtonGroup.svelte';
 </script>
 
 <header>
-  <img src="/images/logo.png" alt="" draggable="false" />
-  <h1>Radiant Stats</h1>
+  <a class="brand" href={resolve('/')} aria-label="Radiant Stats home">
+    <img src="/images/logo.png" alt="" draggable="false" />
+    <span>Radiant Stats</span>
+  </a>
   <NavButtonGroup />
 </header>
 
@@ -18,11 +21,12 @@
     display: flex;
     width: 100%;
     align-items: center;
-    gap: 0.25rem;
-    padding: 0.5rem;
-    border: 1px solid rgba(0, 0, 0, 0.14);
-    background: rgba(0, 0, 0, 0.4);
-    box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+    min-height: 4.5rem;
+    gap: 1rem;
+    padding: 0.625rem clamp(1rem, 4vw, 3rem);
+    border-bottom: 1px solid #2b2b32;
+    background: rgba(13, 13, 15, 0.92);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
     color: white;
     font-family: 'Chakra Petch', sans-serif;
     backdrop-filter: blur(6.9px);
@@ -30,34 +34,37 @@
   }
 
   img {
-    height: 4rem;
+    height: 2.5rem;
     user-select: none;
     -webkit-user-drag: none;
   }
 
-  h1 {
-    margin: 0;
-    font-size: 2.25rem;
+  .brand {
+    display: flex;
+    align-items: center;
+    color: white;
+    gap: 0.5rem;
+    font-size: 1.25rem;
     font-weight: 600;
     letter-spacing: 0;
+    text-decoration: none;
     text-transform: uppercase;
   }
 
+  .brand span {
+    margin: 0;
+  }
+
   :global(nav) {
-    margin-left: 2rem;
+    margin-left: auto;
   }
 
   @media (max-width: 700px) {
-    header {
-      flex-wrap: wrap;
-    }
-
-    h1 {
-      font-size: 1.5rem;
+    .brand {
+      font-size: 1rem;
     }
 
     :global(nav) {
-      width: 100%;
       margin-left: 0;
       overflow-x: auto;
     }

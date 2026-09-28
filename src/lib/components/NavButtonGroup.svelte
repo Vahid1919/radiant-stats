@@ -1,61 +1,82 @@
 <script lang="ts">
-  const labels = ['Form', 'Aim', 'Entry', 'Queue x Time'];
+  import { resolve } from '$app/paths';
+  import { page } from '$app/state';
+
+  const dashboardSections = [
+    { route: '/players/[name]/[tag]#profile', label: 'Profile' },
+    { route: '/players/[name]/[tag]#summary', label: 'Overview' },
+    { route: '/players/[name]/[tag]#history', label: 'Match log' },
+  ] as const;
+
+  const isDashboard = $derived(page.url.pathname.startsWith('/players/'));
 </script>
 
-<nav aria-label="Dashboard sections">
-  {#each labels as label (label)}
-    <button type="button">
-      {label}
-      <span aria-hidden="true"></span>
-    </button>
-  {/each}
+<nav aria-label={isDashboard ? 'Player dashboard sections' : 'Site navigation'}>
+  <a href={isDashboard ? resolve('/') : '#player-search'}>Search</a>
+  {#if isDashboard}
+    {#each dashboardSections as section (section.route)}
+      <a
+        href={resolve(section.route, {
+          name: page.params.name ?? '',
+          tag: page.params.tag ?? '',
+        })}
+      >
+        {section.label}
+        <span aria-hidden="true"></span>
+      </a>
+    {/each}
+  {/if}
 </nav>
 
 <style>
   nav {
     display: flex;
-    gap: 0.5rem;
+    align-items: center;
+    gap: 0.125rem;
   }
 
-  button {
+  a {
     position: relative;
     overflow: visible;
     border: 0;
-    padding: 0.5rem 0.75rem;
-    color: #9ca3af;
+    padding: 0.55rem 0.65rem;
+    color: #b9b9c0;
     background: transparent;
     font-family: 'Space Mono', monospace;
-    font-size: 0.875rem;
-    font-weight: 400;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    text-decoration: none;
     transition:
-      color 200ms ease,
-      text-shadow 200ms ease;
+      color 150ms ease,
+      background 150ms ease;
   }
 
-  button:hover {
+  a:hover {
     color: white;
-    text-shadow: 0 0 8px rgba(255, 255, 255, 0.8);
+    background: #24242a;
   }
 
-  button:focus-visible {
+  a:focus-visible {
     outline: 2px solid white;
     outline-offset: 3px;
   }
 
   span {
     position: absolute;
-    bottom: 0;
+    bottom: 0.2rem;
     left: 50%;
     width: 0;
     height: 1px;
-    background: white;
-    filter: drop-shadow(0 0 4px rgba(255, 255, 255, 0.9));
+    background: var(--valorant-red);
+    filter: none;
     transform: translateX(-50%);
     transition: width 300ms ease;
   }
 
-  button:hover span,
-  button:focus-visible span {
-    width: 60%;
+  a:hover span,
+  a:focus-visible span {
+    width: calc(100% - 1.3rem);
   }
 </style>
