@@ -4,7 +4,6 @@
     area,
     line,
     scaleLinear,
-    scaleTime,
     select,
     timeFormat,
     type Selection,
@@ -21,6 +20,7 @@
   type ChartPoint = PerformanceChartValue & {
     gameNumber: number;
     occurredAt: Date;
+    timeOfDay: number;
     value: number;
   };
 
@@ -52,6 +52,10 @@
     return '#a8a8b0';
   }
 
+  function formatClockTime(totalMinutes: number): string {
+    return `${String(Math.floor(totalMinutes / 60)).padStart(2, '0')}:00`;
+  }
+
   function showTooltip(
     point: ChartPoint,
     xPosition: number,
@@ -71,9 +75,9 @@
   }
 
   function drawChart(svgElement: SVGSVGElement): void {
-    const width = 360;
-    const height = 188;
-    const padding = { top: 18, right: 16, bottom: 28, left: 38 };
+    const width = 440;
+    const height = 236;
+    const padding = { top: 18, right: 20, bottom: 36, left: 48 };
     const points: ChartPoint[] = [];
 
     const gamesByDay = new SvelteMap<string, number>();
@@ -83,34 +87,37 @@
         const dayKey = occurredAt.toLocaleDateString('en-CA');
         const gameNumber = (gamesByDay.get(dayKey) ?? 0) + 1;
         gamesByDay.set(dayKey, gameNumber);
-        points.push({ ...value, occurredAt, gameNumber, value: value.value });
+        points.push({
+          ...value,
+          occurredAt,
+          gameNumber,
+          timeOfDay:
+            occurredAt.getHours() * 60 +
+            occurredAt.getMinutes() +
+            occurredAt.getSeconds() / 60,
+          value: value.value,
+        });
       }
     });
+    const plottedPoints = [...points].sort(
+      (first, second) => first.timeOfDay - second.timeOfDay,
+    );
 
     const svg: Selection<SVGSVGElement, unknown, null, undefined> =
       select(svgElement);
     svg.selectAll('*').remove();
     svg.attr('viewBox', `0 0 ${width} ${height}`);
 
-    const maximum = Math.max(...points.map((point) => point.value), 1);
-    const firstMatch = points[0].occurredAt;
-    const lastMatch = points[points.length - 1].occurredAt;
-    const [domainStart, domainEnd] =
-      firstMatch.getTime() === lastMatch.getTime()
-        ? [
-            new Date(firstMatch.getTime() - 30 * 60 * 1000),
-            new Date(lastMatch.getTime() + 30 * 60 * 1000),
-          ]
-        : [firstMatch, lastMatch];
-    const x = scaleTime()
-      .domain([domainStart, domainEnd])
+    const maximum = Math.max(...plottedPoints.map((point) => point.value), 1);
+    const x = scaleLinear()
+      .domain([0, 24 * 60])
       .range([padding.left, width - padding.right]);
     const y = scaleLinear()
       .domain([0, maximum])
       .nice()
       .range([height - padding.bottom, padding.top]);
 
-    const ticks = y.ticks(3);
+    const ticks = y.ticks(4);
     svg
       .append('g')
       .selectAll('line')
@@ -135,32 +142,31 @@
       .attr('text-anchor', 'end')
       .text((tick) => `${tick}${suffix}`);
 
-    const formatTime = timeFormat('%b %-d %H:%M');
     const formatTooltipTime = timeFormat('%A, %b %-d at %-I:%M %p');
     svg
       .append('g')
       .selectAll('text')
-      .data(x.ticks(3))
+      .data([0, 6 * 60, 12 * 60, 18 * 60, 24 * 60])
       .join('text')
       .attr('x', (tick) => x(tick))
       .attr('y', height - 8)
       .attr('fill', '#a8a8b0')
       .attr('font-size', 9)
       .attr('text-anchor', 'middle')
-      .text((tick) => formatTime(tick));
+      .text((tick) => formatClockTime(tick));
 
     const trend = line<ChartPoint>()
-      .x((point) => x(point.occurredAt))
+      .x((point) => x(point.timeOfDay))
       .y((point) => y(point.value));
 
     if (kind === 'area') {
       const filledArea = area<ChartPoint>()
-        .x((point) => x(point.occurredAt))
+        .x((point) => x(point.timeOfDay))
         .y0(height - padding.bottom)
         .y1((point) => y(point.value));
       svg
         .append('path')
-        .datum(points)
+        .datum(plottedPoints)
         .attr('class', 'area-fill')
         .attr('fill', '#ff4655')
         .attr('fill-opacity', 0.22)
@@ -178,10 +184,10 @@
       svg
         .append('g')
         .selectAll('rect')
-        .data(points)
+        .data(plottedPoints)
         .join('rect')
         .attr('class', 'metric-bar')
-        .attr('x', (point) => x(point.occurredAt) - barWidth / 2)
+        .attr('x', (point) => x(point.timeOfDay) - barWidth / 2)
         .attr('y', (point) => y(point.value))
         .attr('width', barWidth)
         .attr('height', (point) => height - padding.bottom - y(point.value))
@@ -196,7 +202,7 @@
         .on('pointerenter focus', (_event, point) => {
           showTooltip(
             point,
-            x(point.occurredAt),
+            x(point.timeOfDay),
             y(point.value),
             width,
             height,
@@ -213,11 +219,11 @@
       svg
         .append('g')
         .selectAll('line')
-        .data(points)
+        .data(plottedPoints)
         .join('line')
         .attr('class', 'lollipop-stem')
-        .attr('x1', (point) => x(point.occurredAt))
-        .attr('x2', (point) => x(point.occurredAt))
+        .attr('x1', (point) => x(point.timeOfDay))
+        .attr('x2', (point) => x(point.timeOfDay))
         .attr('y1', height - padding.bottom)
         .attr('y2', (point) => y(point.value))
         .attr('stroke', (point) => pointColor(point.outcome))
@@ -225,7 +231,7 @@
     } else {
       svg
         .append('path')
-        .datum(points)
+        .datum(plottedPoints)
         .attr('class', 'trend')
         .attr('fill', 'none')
         .attr('stroke', '#ff4655')
@@ -236,10 +242,10 @@
     svg
       .append('g')
       .selectAll('circle')
-      .data(points)
+      .data(plottedPoints)
       .join('circle')
       .attr('class', 'metric-mark')
-      .attr('cx', (point) => x(point.occurredAt))
+      .attr('cx', (point) => x(point.timeOfDay))
       .attr('cy', (point) => y(point.value))
       .attr('r', kind === 'lollipop' ? 4.5 : 3.5)
       .attr('fill', (point) => pointColor(point.outcome))
@@ -253,7 +259,7 @@
       .on('pointerenter focus', (_event, point) => {
         showTooltip(
           point,
-          x(point.occurredAt),
+          x(point.timeOfDay),
           y(point.value),
           width,
           height,
