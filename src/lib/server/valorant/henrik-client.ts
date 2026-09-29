@@ -301,22 +301,22 @@ function parseCompetitiveMatch(
         roundsPlayed === 0
           ? 0
           : Math.round(
-              requiredNonNegativeInteger(
-                stats,
-                'score',
-                'HenrikDev returned invalid score statistics.',
-              ) / roundsPlayed,
-            ),
+            requiredNonNegativeInteger(
+              stats,
+              'score',
+              'HenrikDev returned invalid score statistics.',
+            ) / roundsPlayed,
+          ),
       averageDamagePerRound:
         roundsPlayed === 0
           ? 0
           : Math.round(
-              requiredNonNegativeInteger(
-                damage,
-                'dealt',
-                'HenrikDev returned invalid damage statistics.',
-              ) / roundsPlayed,
-            ),
+            requiredNonNegativeInteger(
+              damage,
+              'dealt',
+              'HenrikDev returned invalid damage statistics.',
+            ) / roundsPlayed,
+          ),
       headshots: requiredNonNegativeInteger(
         stats,
         'headshots',
@@ -327,14 +327,14 @@ function parseCompetitiveMatch(
         hitCount === 0
           ? 0
           : Math.round(
-              (requiredNonNegativeInteger(
-                stats,
-                'headshots',
-                'HenrikDev returned invalid hit statistics.',
-              ) /
-                hitCount) *
-                1000,
-            ) / 10,
+            (requiredNonNegativeInteger(
+              stats,
+              'headshots',
+              'HenrikDev returned invalid hit statistics.',
+            ) /
+              hitCount) *
+            1000,
+          ) / 10,
       firstBloods: optionalNonNegativeInteger(
         stats,
         'first_bloods',
@@ -451,7 +451,7 @@ export async function fetchCompetitiveMatches(
 
   const matches: CompetitiveMatchInput[] = [];
 
-  for (let start = 0; start < COMPETITIVE_MATCH_LIMIT; ) {
+  for (let start = 0; start < COMPETITIVE_MATCH_LIMIT;) {
     const url = new URL(
       `/valorant/v4/matches/${encodeURIComponent(profile.region.toLowerCase())}/pc/${encodeURIComponent(profile.riotId.name)}/${encodeURIComponent(profile.riotId.tag)}`,
       HENRIK_API_URL,
