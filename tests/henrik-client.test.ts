@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   fetchCompetitiveMatches,
+  fetchPlayerDashboard,
   fetchPlayerProfile,
   PlayerLookupError,
 } from '../src/lib/server/valorant/henrik-client';
@@ -150,7 +151,7 @@ describe('fetchPlayerProfile', () => {
 });
 
 describe('fetchCompetitiveMatches', () => {
-  it('requests the last 20 competitive matches and maps the player metrics', async () => {
+  it('requests the first detailed history page and maps player metrics', async () => {
     const fetchFn = vi.fn<typeof fetch>().mockResolvedValue(
       new Response(JSON.stringify(competitiveMatchResponse), {
         status: 200,
@@ -182,9 +183,86 @@ describe('fetchCompetitiveMatches', () => {
     ]);
     expect(fetchFn).toHaveBeenCalledWith(
       expect.objectContaining({
-        href: 'https://api.henrikdev.xyz/valorant/v4/matches/eu/pc/Player%20Name/EUW?mode=competitive&size=20',
+        href: 'https://api.henrikdev.xyz/valorant/v4/matches/eu/pc/Player%20Name/EUW?mode=competitive&size=20&start=0',
       }),
       { headers: { Authorization: 'test-api-key' } },
     );
+  });
+
+  it('paginates detailed history up to the configured limit', async () => {
+    const fullPage = {
+      ...competitiveMatchResponse,
+      data: Array.from({ length: 20 }, (_, index) => ({
+        ...competitiveMatchResponse.data[0],
+        metadata: {
+          ...competitiveMatchResponse.data[0].metadata,
+          match_id: `match-${index}`,
+        },
+      })),
+    };
+    const finalPage = {
+      ...competitiveMatchResponse,
+      data: [
+        {
+          ...competitiveMatchResponse.data[0],
+          metadata: {
+            ...competitiveMatchResponse.data[0].metadata,
+            match_id: 'match-20',
+          },
+        },
+      ],
+    };
+    const fetchFn = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(fullPage), { status: 200 }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(finalPage), { status: 200 }),
+      );
+
+    await expect(
+      fetchCompetitiveMatches(playerProfile, fetchFn, 'test-api-key'),
+    ).resolves.toHaveLength(21);
+    expect(fetchFn).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        href: 'https://api.henrikdev.xyz/valorant/v4/matches/eu/pc/Player%20Name/EUW?mode=competitive&size=20&start=20',
+      }),
+      { headers: { Authorization: 'test-api-key' } },
+    );
+  });
+});
+
+describe('fetchPlayerDashboard', () => {
+  it('reuses a cached dashboard for fifteen minutes', async () => {
+    const fetchFn = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(accountResponse), { status: 200 }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(competitiveMatchResponse), { status: 200 }),
+      );
+    vi.stubGlobal('fetch', fetchFn);
+
+    try {
+      await fetchPlayerDashboard(
+        'Cached Player',
+        'EUW',
+        undefined,
+        'test-api-key',
+      );
+      await fetchPlayerDashboard(
+        'Cached Player',
+        'EUW',
+        undefined,
+        'test-api-key',
+      );
+
+      expect(fetchFn).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

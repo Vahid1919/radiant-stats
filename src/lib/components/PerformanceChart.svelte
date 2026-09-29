@@ -13,15 +13,18 @@
     startedAt: string;
     outcome: 'win' | 'loss' | 'draw';
     value: number | null;
+    detail?: string;
   };
 
   export type PerformanceChartKind = 'area' | 'bar' | 'line' | 'lollipop';
+  export type PerformanceChartXAxis = 'time-of-day' | 'chronological';
 
   type ChartPoint = PerformanceChartValue & {
     gameNumber: number;
     occurredAt: Date;
     timeOfDay: number;
     value: number;
+    sequence: number;
   };
 
   type TooltipPoint = {
@@ -31,6 +34,7 @@
     value: number;
     x: number;
     y: number;
+    detail?: string;
   };
 
   type Props = {
@@ -39,9 +43,17 @@
     values: PerformanceChartValue[];
     kind: PerformanceChartKind;
     suffix?: string;
+    xAxis?: PerformanceChartXAxis;
   };
 
-  let { title, description, values, kind, suffix = '' }: Props = $props();
+  let {
+    title,
+    description,
+    values,
+    kind,
+    suffix = '',
+    xAxis = 'time-of-day',
+  }: Props = $props();
   let chartElement = $state<SVGSVGElement | null>(null);
   let hoveredPoint = $state<TooltipPoint | null>(null);
   const hasData = $derived(values.some((value) => value.value !== null));
@@ -71,6 +83,7 @@
       value: point.value,
       x: Math.min(Math.max((xPosition / width) * 100, 22), 78),
       y: Math.max((yPosition / height) * 100, 28),
+      detail: point.detail,
     };
   }
 
@@ -96,12 +109,17 @@
             occurredAt.getMinutes() +
             occurredAt.getSeconds() / 60,
           value: value.value,
+          sequence: 0,
         });
       }
     });
-    const plottedPoints = [...points].sort(
-      (first, second) => first.timeOfDay - second.timeOfDay,
-    );
+    const plottedPoints = [...points]
+      .sort((first, second) =>
+        xAxis === 'chronological'
+          ? first.occurredAt.getTime() - second.occurredAt.getTime()
+          : first.timeOfDay - second.timeOfDay,
+      )
+      .map((point, sequence) => ({ ...point, sequence }));
 
     const svg: Selection<SVGSVGElement, unknown, null, undefined> =
       select(svgElement);
@@ -109,9 +127,16 @@
     svg.attr('viewBox', `0 0 ${width} ${height}`);
 
     const maximum = Math.max(...plottedPoints.map((point) => point.value), 1);
-    const x = scaleLinear()
+    const timeOfDayX = scaleLinear()
       .domain([0, 24 * 60])
       .range([padding.left, width - padding.right]);
+    const chronologicalX = scaleLinear()
+      .domain([0, Math.max(plottedPoints.length - 1, 1)])
+      .range([padding.left, width - padding.right]);
+    const xPosition = (point: ChartPoint): number =>
+      xAxis === 'chronological'
+        ? chronologicalX(point.sequence)
+        : timeOfDayX(point.timeOfDay);
     const y = scaleLinear()
       .domain([0, maximum])
       .nice()
@@ -143,25 +168,49 @@
       .text((tick) => `${tick}${suffix}`);
 
     const formatTooltipTime = timeFormat('%A, %b %-d at %-I:%M %p');
-    svg
-      .append('g')
-      .selectAll('text')
-      .data([0, 6 * 60, 12 * 60, 18 * 60, 24 * 60])
-      .join('text')
-      .attr('x', (tick) => x(tick))
-      .attr('y', height - 8)
-      .attr('fill', '#a8a8b0')
-      .attr('font-size', 9)
-      .attr('text-anchor', 'middle')
-      .text((tick) => formatClockTime(tick));
+    if (xAxis === 'chronological') {
+      const tickIndexes = [
+        0,
+        Math.floor((plottedPoints.length - 1) / 2),
+        plottedPoints.length - 1,
+      ].filter(
+        (index, position, indexes) =>
+          index >= 0 && indexes.indexOf(index) === position,
+      );
+      const formatDate = timeFormat('%b %-d');
+
+      svg
+        .append('g')
+        .selectAll('text')
+        .data(tickIndexes)
+        .join('text')
+        .attr('x', (index) => chronologicalX(index))
+        .attr('y', height - 8)
+        .attr('fill', '#a8a8b0')
+        .attr('font-size', 9)
+        .attr('text-anchor', 'middle')
+        .text((index) => formatDate(plottedPoints[index].occurredAt));
+    } else {
+      svg
+        .append('g')
+        .selectAll('text')
+        .data([0, 6 * 60, 12 * 60, 18 * 60, 24 * 60])
+        .join('text')
+        .attr('x', (tick) => timeOfDayX(tick))
+        .attr('y', height - 8)
+        .attr('fill', '#a8a8b0')
+        .attr('font-size', 9)
+        .attr('text-anchor', 'middle')
+        .text((tick) => formatClockTime(tick));
+    }
 
     const trend = line<ChartPoint>()
-      .x((point) => x(point.timeOfDay))
+      .x((point) => xPosition(point))
       .y((point) => y(point.value));
 
     if (kind === 'area') {
       const filledArea = area<ChartPoint>()
-        .x((point) => x(point.timeOfDay))
+        .x((point) => xPosition(point))
         .y0(height - padding.bottom)
         .y1((point) => y(point.value));
       svg
@@ -187,7 +236,7 @@
         .data(plottedPoints)
         .join('rect')
         .attr('class', 'metric-bar')
-        .attr('x', (point) => x(point.timeOfDay) - barWidth / 2)
+        .attr('x', (point) => xPosition(point) - barWidth / 2)
         .attr('y', (point) => y(point.value))
         .attr('width', barWidth)
         .attr('height', (point) => height - padding.bottom - y(point.value))
@@ -202,7 +251,7 @@
         .on('pointerenter focus', (_event, point) => {
           showTooltip(
             point,
-            x(point.timeOfDay),
+            xPosition(point),
             y(point.value),
             width,
             height,
@@ -222,8 +271,8 @@
         .data(plottedPoints)
         .join('line')
         .attr('class', 'lollipop-stem')
-        .attr('x1', (point) => x(point.timeOfDay))
-        .attr('x2', (point) => x(point.timeOfDay))
+        .attr('x1', (point) => xPosition(point))
+        .attr('x2', (point) => xPosition(point))
         .attr('y1', height - padding.bottom)
         .attr('y2', (point) => y(point.value))
         .attr('stroke', (point) => pointColor(point.outcome))
@@ -245,7 +294,7 @@
       .data(plottedPoints)
       .join('circle')
       .attr('class', 'metric-mark')
-      .attr('cx', (point) => x(point.timeOfDay))
+      .attr('cx', (point) => xPosition(point))
       .attr('cy', (point) => y(point.value))
       .attr('r', kind === 'lollipop' ? 4.5 : 3.5)
       .attr('fill', (point) => pointColor(point.outcome))
@@ -259,7 +308,7 @@
       .on('pointerenter focus', (_event, point) => {
         showTooltip(
           point,
-          x(point.timeOfDay),
+          xPosition(point),
           y(point.value),
           width,
           height,
@@ -294,6 +343,9 @@
       >
         <strong>{hoveredPoint.value}{suffix}</strong>
         <span>{hoveredPoint.time}</span>
+        {#if hoveredPoint.detail}
+          <span>{hoveredPoint.detail}</span>
+        {/if}
         <span
           >Game {hoveredPoint.gameNumber} of the day · {hoveredPoint.outcome}</span
         >

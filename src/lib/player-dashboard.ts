@@ -1,6 +1,22 @@
 import type { PlayerProfile } from './player-profile';
 
-export type CompetitiveMatch = {
+type CompetitiveMatchInputStatistics = {
+  kills: number;
+  deaths: number;
+  assists: number;
+  averageCombatScore: number;
+  averageDamagePerRound: number;
+  headshots: number;
+  totalHits: number;
+  headshotPercentage: number;
+  firstBloods: number | null;
+};
+
+type CompetitiveMatchStatistics = CompetitiveMatchInputStatistics & {
+  killAssistDeathRatio: number;
+};
+
+export type CompetitiveMatchInput = {
   id: string;
   startedAt: string;
   mapName: string;
@@ -10,17 +26,11 @@ export type CompetitiveMatch = {
     won: number;
     lost: number;
   };
-  stats: {
-    kills: number;
-    deaths: number;
-    assists: number;
-    averageCombatScore: number;
-    averageDamagePerRound: number;
-    headshots: number;
-    totalHits: number;
-    headshotPercentage: number;
-    firstBloods: number | null;
-  };
+  stats: CompetitiveMatchInputStatistics;
+};
+
+export type CompetitiveMatch = Omit<CompetitiveMatchInput, 'stats'> & {
+  stats: CompetitiveMatchStatistics;
 };
 
 export type CompetitiveSummary = {
@@ -41,10 +51,27 @@ export type CompetitiveSummary = {
   mostPlayedMap: string | null;
 };
 
+export type FirstBloodTrendPoint = {
+  matchId: string;
+  startedAt: string;
+  outcome: CompetitiveMatch['outcome'];
+  firstBloods: number;
+  rounds: number;
+  rate: number;
+  windowMatchCount: number;
+};
+
+export type FirstBloodHistory = {
+  matchCount: number;
+  roundCount: number;
+  trend: FirstBloodTrendPoint[];
+};
+
 export type PlayerDashboard = {
   profile: PlayerProfile;
   summary: CompetitiveSummary;
   matches: CompetitiveMatch[];
+  firstBloodHistory: FirstBloodHistory;
 };
 
 function round(value: number, decimals = 0): number {
@@ -70,13 +97,96 @@ function mostFrequent(values: string[]): string | null {
   return result;
 }
 
-export function summarizeCompetitiveMatches(
+function calculateKillAssistDeathRatio(
+  kills: number,
+  deaths: number,
+  assists: number,
+): number {
+  return round((kills + assists) / Math.max(deaths, 1), 2);
+}
+
+function roundsInMatch(match: CompetitiveMatch): number {
+  return match.score.won + match.score.lost;
+}
+
+function buildFirstBloodHistory(
+  matches: CompetitiveMatch[],
+): FirstBloodHistory {
+  const matchesWithFirstBloods = matches
+    .flatMap((match) => {
+      const firstBloods = match.stats.firstBloods;
+      return firstBloods === null ? [] : [{ match, firstBloods }];
+    })
+    .sort((first, second) =>
+      first.match.startedAt.localeCompare(second.match.startedAt),
+    );
+  const trend = matchesWithFirstBloods.map(({ match, firstBloods }, index) => {
+    const window = matchesWithFirstBloods.slice(
+      Math.max(0, index - 4),
+      index + 1,
+    );
+    const windowRounds = window.reduce(
+      (total, windowMatch) => total + roundsInMatch(windowMatch.match),
+      0,
+    );
+    const windowFirstBloods = window.reduce(
+      (total, windowMatch) => total + windowMatch.firstBloods,
+      0,
+    );
+
+    return {
+      matchId: match.id,
+      startedAt: match.startedAt,
+      outcome: match.outcome,
+      firstBloods,
+      rounds: roundsInMatch(match),
+      rate:
+        windowRounds === 0
+          ? 0
+          : round((windowFirstBloods / windowRounds) * 100, 1),
+      windowMatchCount: window.length,
+    };
+  });
+
+  return {
+    matchCount: matchesWithFirstBloods.length,
+    roundCount: matchesWithFirstBloods.reduce(
+      (total, match) => total + roundsInMatch(match.match),
+      0,
+    ),
+    trend,
+  };
+}
+
+export function buildCompetitivePerformance(
+  matchInputs: CompetitiveMatchInput[],
+): Pick<PlayerDashboard, 'matches' | 'summary' | 'firstBloodHistory'> {
+  const matches = matchInputs.map((match) => ({
+    ...match,
+    stats: {
+      ...match.stats,
+      killAssistDeathRatio: calculateKillAssistDeathRatio(
+        match.stats.kills,
+        match.stats.deaths,
+        match.stats.assists,
+      ),
+    },
+  }));
+
+  return {
+    matches,
+    summary: summarizeCompetitiveMatches(matches),
+    firstBloodHistory: buildFirstBloodHistory(matches),
+  };
+}
+
+function summarizeCompetitiveMatches(
   matches: CompetitiveMatch[],
 ): CompetitiveSummary {
   const matchCount = matches.length;
   const totals = matches.reduce(
     (summary, match) => {
-      const rounds = match.score.won + match.score.lost;
+      const rounds = roundsInMatch(match);
       summary.kills += match.stats.kills;
       summary.deaths += match.stats.deaths;
       summary.assists += match.stats.assists;
@@ -112,9 +222,10 @@ export function summarizeCompetitiveMatches(
     draws: totals.draws,
     winRate: matchCount === 0 ? 0 : round((totals.wins / matchCount) * 100, 1),
     killDeathRatio: round(totals.kills / Math.max(totals.deaths, 1), 2),
-    killAssistDeathRatio: round(
-      (totals.kills + totals.assists) / Math.max(totals.deaths, 1),
-      2,
+    killAssistDeathRatio: calculateKillAssistDeathRatio(
+      totals.kills,
+      totals.deaths,
+      totals.assists,
     ),
     averageCombatScore:
       totals.rounds === 0 ? 0 : round(totals.score / totals.rounds),

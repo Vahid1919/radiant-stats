@@ -2,6 +2,7 @@
   import { resolve } from '$app/paths';
   import Nav from '$lib/components/Nav.svelte';
   import PerformanceChart from '$lib/components/PerformanceChart.svelte';
+  import type { FirstBloodTrendPoint } from '$lib/player-dashboard';
   import type { PageData } from './$types';
 
   let { data } = $props<{ data: PageData }>();
@@ -14,14 +15,6 @@
       month: 'short',
       day: 'numeric',
     }).format(new Date(value));
-  }
-
-  function calculateKda(
-    kills: number,
-    deaths: number,
-    assists: number,
-  ): number {
-    return Math.round(((kills + assists) / Math.max(deaths, 1)) * 100) / 100;
   }
 </script>
 
@@ -44,7 +37,7 @@
       <img src={data.dashboard.profile.card.small} alt="" />
       <div>
         <p class="eyebrow">
-          Last {data.dashboard.summary.matchCount} competitive matches
+          Available history: {data.dashboard.summary.matchCount} competitive matches
         </p>
         <h1>
           {data.dashboard.profile.riotId.name}<span
@@ -162,13 +155,26 @@
           values={chronologicalMatches.map((match) => ({
             startedAt: match.startedAt,
             outcome: match.outcome,
-            value: calculateKda(
-              match.stats.kills,
-              match.stats.deaths,
-              match.stats.assists,
-            ),
+            value: match.stats.killAssistDeathRatio,
           }))}
         />
+        {#if data.dashboard.firstBloodHistory.trend.length > 0}
+          <PerformanceChart
+            title="First Blood Rate"
+            description={`Five-match rolling rate · ${data.dashboard.firstBloodHistory.matchCount} matches / ${data.dashboard.firstBloodHistory.roundCount} rounds`}
+            kind="line"
+            suffix=" FB/100 rounds"
+            xAxis="chronological"
+            values={data.dashboard.firstBloodHistory.trend.map(
+              (point: FirstBloodTrendPoint) => ({
+                startedAt: point.startedAt,
+                outcome: point.outcome,
+                value: point.rate,
+                detail: `${point.firstBloods} First Bloods · ${point.rounds} rounds · ${point.windowMatchCount}-match average`,
+              }),
+            )}
+          />
+        {/if}
       </div>
       <div class="table-wrap">
         <table>

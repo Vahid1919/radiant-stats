@@ -1,12 +1,27 @@
 import { env } from '$env/dynamic/private';
 import {
-  summarizeCompetitiveMatches,
-  type CompetitiveMatch,
+  buildCompetitivePerformance,
+  type CompetitiveMatchInput,
   type PlayerDashboard,
 } from '$lib/player-dashboard';
 import type { PlayerProfile } from '$lib/player-profile';
 
 const HENRIK_API_URL = 'https://api.henrikdev.xyz';
+const COMPETITIVE_MATCH_PAGE_SIZE = 20;
+const COMPETITIVE_MATCH_LIMIT = 100;
+const DASHBOARD_CACHE_DURATION_MS = 15 * 60 * 1000;
+
+type CompetitiveMatchPage = {
+  matches: CompetitiveMatchInput[];
+  returnedMatchCount: number;
+};
+
+type DashboardCacheEntry = {
+  dashboard: PlayerDashboard;
+  expiresAt: number;
+};
+
+const dashboardCache = new Map<string, DashboardCacheEntry>();
 
 type HenrikAccountResponse = {
   data: {
@@ -149,7 +164,7 @@ function optionalNonNegativeInteger(
 function parseCompetitiveMatch(
   value: unknown,
   playerPuuid: string,
-): CompetitiveMatch | null {
+): CompetitiveMatchInput | null {
   const match = requiredRecord(value, 'HenrikDev returned an invalid match.');
   const metadata = requiredRecord(
     match.metadata,
@@ -332,7 +347,7 @@ function parseCompetitiveMatch(
 function parseCompetitiveMatches(
   value: unknown,
   playerPuuid: string,
-): CompetitiveMatch[] {
+): CompetitiveMatchPage {
   const response = requiredRecord(
     value,
     'HenrikDev returned an unexpected match response.',
@@ -344,14 +359,17 @@ function parseCompetitiveMatches(
     );
   }
 
-  return response.data.slice(0, 20).flatMap((match) => {
-    try {
-      const parsedMatch = parseCompetitiveMatch(match, playerPuuid);
-      return parsedMatch ? [parsedMatch] : [];
-    } catch {
-      return [];
-    }
-  });
+  return {
+    returnedMatchCount: response.data.length,
+    matches: response.data.flatMap((match) => {
+      try {
+        const parsedMatch = parseCompetitiveMatch(match, playerPuuid);
+        return parsedMatch ? [parsedMatch] : [];
+      } catch {
+        return [];
+      }
+    }),
+  };
 }
 
 export async function fetchPlayerProfile(
@@ -423,7 +441,7 @@ export async function fetchCompetitiveMatches(
   profile: PlayerProfile,
   fetchFn: typeof fetch = fetch,
   apiKey: string | undefined = env.VALORANT_API_KEY,
-): Promise<CompetitiveMatch[]> {
+): Promise<CompetitiveMatchInput[]> {
   if (!isNonEmptyString(apiKey)) {
     throw new PlayerLookupError(
       'upstream',
@@ -431,44 +449,62 @@ export async function fetchCompetitiveMatches(
     );
   }
 
-  const url = new URL(
-    `/valorant/v4/matches/${encodeURIComponent(profile.region.toLowerCase())}/pc/${encodeURIComponent(profile.riotId.name)}/${encodeURIComponent(profile.riotId.tag)}`,
-    HENRIK_API_URL,
-  );
-  url.searchParams.set('mode', 'competitive');
-  url.searchParams.set('size', '20');
+  const matches: CompetitiveMatchInput[] = [];
 
-  let response: Response;
-  try {
-    response = await fetchFn(url, {
-      headers: { Authorization: apiKey },
-    });
-  } catch {
-    throw new PlayerLookupError(
-      'upstream',
-      'HenrikDev could not retrieve competitive matches.',
+  for (
+    let start = 0;
+    start < COMPETITIVE_MATCH_LIMIT;
+    start += COMPETITIVE_MATCH_PAGE_SIZE
+  ) {
+    const url = new URL(
+      `/valorant/v4/matches/${encodeURIComponent(profile.region.toLowerCase())}/pc/${encodeURIComponent(profile.riotId.name)}/${encodeURIComponent(profile.riotId.tag)}`,
+      HENRIK_API_URL,
     );
+    url.searchParams.set('mode', 'competitive');
+    url.searchParams.set('size', String(COMPETITIVE_MATCH_PAGE_SIZE));
+    url.searchParams.set('start', String(start));
+
+    let response: Response;
+    try {
+      response = await fetchFn(url, {
+        headers: { Authorization: apiKey },
+      });
+    } catch {
+      throw new PlayerLookupError(
+        'upstream',
+        'HenrikDev could not retrieve competitive matches.',
+      );
+    }
+
+    if (response.status === 404) {
+      return matches;
+    }
+
+    if (!response.ok) {
+      throw new PlayerLookupError(
+        'upstream',
+        'HenrikDev could not retrieve competitive matches.',
+      );
+    }
+
+    let body: unknown;
+    try {
+      body = await response.json();
+    } catch {
+      throw new PlayerLookupError(
+        'upstream',
+        'HenrikDev returned invalid JSON.',
+      );
+    }
+
+    const page = parseCompetitiveMatches(body, profile.puuid);
+    matches.push(...page.matches);
+    if (page.returnedMatchCount < COMPETITIVE_MATCH_PAGE_SIZE) {
+      return matches;
+    }
   }
 
-  if (response.status === 404) {
-    return [];
-  }
-
-  if (!response.ok) {
-    throw new PlayerLookupError(
-      'upstream',
-      'HenrikDev could not retrieve competitive matches.',
-    );
-  }
-
-  let body: unknown;
-  try {
-    body = await response.json();
-  } catch {
-    throw new PlayerLookupError('upstream', 'HenrikDev returned invalid JSON.');
-  }
-
-  return parseCompetitiveMatches(body, profile.puuid);
+  return matches;
 }
 
 export async function fetchPlayerDashboard(
@@ -477,12 +513,34 @@ export async function fetchPlayerDashboard(
   fetchFn: typeof fetch = fetch,
   apiKey: string | undefined = env.VALORANT_API_KEY,
 ): Promise<PlayerDashboard> {
-  const profile = await fetchPlayerProfile(name, tag, fetchFn, apiKey);
-  const matches = await fetchCompetitiveMatches(profile, fetchFn, apiKey);
+  const cacheKey = `${name.trim().toLocaleLowerCase()}#${tag.trim().toLocaleLowerCase()}`;
+  const canUseCache = fetchFn === fetch;
+  const cachedDashboard = canUseCache
+    ? dashboardCache.get(cacheKey)
+    : undefined;
 
-  return {
+  if (cachedDashboard && cachedDashboard.expiresAt > Date.now()) {
+    return cachedDashboard.dashboard;
+  }
+
+  if (cachedDashboard) {
+    dashboardCache.delete(cacheKey);
+  }
+
+  const profile = await fetchPlayerProfile(name, tag, fetchFn, apiKey);
+  const matchInputs = await fetchCompetitiveMatches(profile, fetchFn, apiKey);
+  const performance = buildCompetitivePerformance(matchInputs);
+  const dashboard = {
     profile,
-    matches,
-    summary: summarizeCompetitiveMatches(matches),
+    ...performance,
   };
+
+  if (canUseCache) {
+    dashboardCache.set(cacheKey, {
+      dashboard,
+      expiresAt: Date.now() + DASHBOARD_CACHE_DURATION_MS,
+    });
+  }
+
+  return dashboard;
 }
