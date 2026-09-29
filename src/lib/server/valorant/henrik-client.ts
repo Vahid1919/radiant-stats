@@ -451,11 +451,7 @@ export async function fetchCompetitiveMatches(
 
   const matches: CompetitiveMatchInput[] = [];
 
-  for (
-    let start = 0;
-    start < COMPETITIVE_MATCH_LIMIT;
-    start += COMPETITIVE_MATCH_PAGE_SIZE
-  ) {
+  for (let start = 0; start < COMPETITIVE_MATCH_LIMIT; ) {
     const url = new URL(
       `/valorant/v4/matches/${encodeURIComponent(profile.region.toLowerCase())}/pc/${encodeURIComponent(profile.riotId.name)}/${encodeURIComponent(profile.riotId.tag)}`,
       HENRIK_API_URL,
@@ -499,9 +495,11 @@ export async function fetchCompetitiveMatches(
 
     const page = parseCompetitiveMatches(body, profile.puuid);
     matches.push(...page.matches);
-    if (page.returnedMatchCount < COMPETITIVE_MATCH_PAGE_SIZE) {
+    if (page.returnedMatchCount === 0) {
       return matches;
     }
+
+    start += page.returnedMatchCount;
   }
 
   return matches;

@@ -71,6 +71,8 @@ const competitiveMatchResponse = {
   ],
 };
 
+const emptyCompetitiveMatchResponse = { status: 200, data: [] };
+
 describe('fetchPlayerProfile', () => {
   it('encodes the Riot ID and maps a valid upstream response', async () => {
     const fetchFn = vi
@@ -152,11 +154,18 @@ describe('fetchPlayerProfile', () => {
 
 describe('fetchCompetitiveMatches', () => {
   it('requests the first detailed history page and maps player metrics', async () => {
-    const fetchFn = vi.fn<typeof fetch>().mockResolvedValue(
-      new Response(JSON.stringify(competitiveMatchResponse), {
-        status: 200,
-      }),
-    );
+    const fetchFn = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(competitiveMatchResponse), {
+          status: 200,
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(emptyCompetitiveMatchResponse), {
+          status: 200,
+        }),
+      );
 
     await expect(
       fetchCompetitiveMatches(playerProfile, fetchFn, 'test-api-key'),
@@ -219,6 +228,11 @@ describe('fetchCompetitiveMatches', () => {
       )
       .mockResolvedValueOnce(
         new Response(JSON.stringify(finalPage), { status: 200 }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(emptyCompetitiveMatchResponse), {
+          status: 200,
+        }),
       );
 
     await expect(
@@ -228,6 +242,55 @@ describe('fetchCompetitiveMatches', () => {
       2,
       expect.objectContaining({
         href: 'https://api.henrikdev.xyz/valorant/v4/matches/eu/pc/Player%20Name/EUW?mode=competitive&size=20&start=20',
+      }),
+      { headers: { Authorization: 'test-api-key' } },
+    );
+  });
+
+  it('continues after a short nonempty history page', async () => {
+    const shortPage = {
+      ...competitiveMatchResponse,
+      data: Array.from({ length: 10 }, (_, index) => ({
+        ...competitiveMatchResponse.data[0],
+        metadata: {
+          ...competitiveMatchResponse.data[0].metadata,
+          match_id: `match-${index}`,
+        },
+      })),
+    };
+    const finalPage = {
+      ...competitiveMatchResponse,
+      data: [
+        {
+          ...competitiveMatchResponse.data[0],
+          metadata: {
+            ...competitiveMatchResponse.data[0].metadata,
+            match_id: 'match-10',
+          },
+        },
+      ],
+    };
+    const fetchFn = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(shortPage), { status: 200 }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(finalPage), { status: 200 }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(emptyCompetitiveMatchResponse), {
+          status: 200,
+        }),
+      );
+
+    await expect(
+      fetchCompetitiveMatches(playerProfile, fetchFn, 'test-api-key'),
+    ).resolves.toHaveLength(11);
+    expect(fetchFn).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        href: 'https://api.henrikdev.xyz/valorant/v4/matches/eu/pc/Player%20Name/EUW?mode=competitive&size=20&start=10',
       }),
       { headers: { Authorization: 'test-api-key' } },
     );
@@ -243,6 +306,11 @@ describe('fetchPlayerDashboard', () => {
       )
       .mockResolvedValueOnce(
         new Response(JSON.stringify(competitiveMatchResponse), { status: 200 }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(emptyCompetitiveMatchResponse), {
+          status: 200,
+        }),
       );
     vi.stubGlobal('fetch', fetchFn);
 
@@ -260,7 +328,7 @@ describe('fetchPlayerDashboard', () => {
         'test-api-key',
       );
 
-      expect(fetchFn).toHaveBeenCalledTimes(2);
+      expect(fetchFn).toHaveBeenCalledTimes(3);
     } finally {
       vi.unstubAllGlobals();
     }
